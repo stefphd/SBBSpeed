@@ -5,9 +5,9 @@
 
 /*
  * Radius on wheel is 255mm
- * Radius of encoder wheel is 61/2=30.5mm
- * Gear ratio between tire and encoder is roughly 255/30.5=8.36
- * Correction factor of 0.9784 found by calibration
+ * Radius of encoder wheel is 58/2=29mm
+ * Gear ratio between tire and encoder is roughly 255/29=8.79
+ * Correction factor of 0.XXX found by calibration
  */
 
 #include "SerialTransfer.h"
@@ -20,6 +20,8 @@
 #define IS_INTERRUPT_ON_B //uncomment to use both interrupts
 #define MODE_INT CHANGE //RISING, FALLING, or CHANGE
 
+#define MODE_FIXED_INTERVAL //uncomment to use the fixed time interval measure
+
 #define ENCA_PIN 5 //encoder A pin
 #define ENCB_PIN 6 //encoder B pin
 #define ENCZ_PIN 7 //encoder Z pin
@@ -28,12 +30,12 @@
 #define BAUDRATE 4e6
 
 #define PPR 100.0 //pulse per revolution of the encoder
-#define SPEED_RATIO 8.36 //speed ratio between wheel and encoder speed
+#define SPEED_RATIO 8.79 //speed ratio between wheel and encoder speed
 #define RADIUS 0.295 //wheel effective radius
-#define DT 10.0e3 //update time (us)
+#define DT 20.0 //update time (ms)
 #define SPEED_SCALE 1.0e3 //speed scale, now m/s to mm/s
 #define DIST_SCALE 4.0 //distance scale, now 1m to units of 0.25m
-#define CORRECTION_FAC 0.9784 //correction factor from calibration (should be close to 1)
+#define CORRECTION_FAC 0.974 //correction factor from calibration (should be close to 1)
 
 
 #ifndef IS_INTERRUPT_ON_B
@@ -100,12 +102,19 @@ void setup() {
 
 void loop() {  
   
-  if ((micros()-timer)>=DT) {
+  if ((millis()-timer)>=DT) {
     
-    timer = micros();//update timer
+    timer = millis();//update timer
     
     //compute speed
-	speed.speed = dir * round(CORRECTION_FAC*double(2 * PI*RADIUS) / double(MULTIPLIER*PPR*SPEED_RATIO*timeBetweenPulse)*1e6*SPEED_SCALE);
+#ifdef MODE_FIXED_INTERVAL
+    speed.speed = dir * double(c)/double(MULTIPLIER*PPR*SPEED_RATIO) * double(2 * PI * RADIUS / (DT/1000.0)) * SPEED_SCALE * CORRECTION_FAC;
+    cli(); //clear interrupts
+    c = 0; //reset the counter
+    sei(); //set interrupts
+#else
+    speed.speed = dir * round(CORRECTION_FAC*double(2 * PI*RADIUS) / double(MULTIPLIER*PPR*SPEED_RATIO*timeBetweenPulse)*1e6*SPEED_SCALE);
+#endif
 	speed.dist = 2 * PI*RADIUS*float(rev) / SPEED_RATIO * DIST_SCALE * CORRECTION_FAC;
 	//send struct via serial
 	serialTransfer.sendDatum(speed);
